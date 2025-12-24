@@ -29,22 +29,50 @@ class DashboardHandler(http.server.SimpleHTTPRequestHandler):
                 self.path = "/index.html"
             super().do_GET()
 
+    def zte_login(self):
+        """Trigger login on the ZTE API server"""
+        try:
+            req = urllib.request.Request(f"{ZTE_API_URL}/login", method="POST")
+            req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=15) as response:
+                data = json.loads(response.read())
+                return data.get("success", False)
+        except Exception as e:
+            print(f"ZTE login failed: {e}")
+            return False
+
+    def fetch_api(self, api_path):
+        """Fetch from ZTE API server"""
+        req = urllib.request.Request(f"{ZTE_API_URL}{api_path}")
+        req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=15) as response:
+            return response.read()
+
     def proxy_api(self):
-        """Proxy requests to ZTE API server"""
+        """Proxy requests to ZTE API server with retry on auth errors"""
         # Map /api/pon -> /pon, /api/lan -> /lan, etc.
         api_path = self.path.replace("/api", "", 1)
 
         try:
-            req = urllib.request.Request(f"{ZTE_API_URL}{api_path}")
-            req.add_header("Content-Type", "application/json")
+            try:
+                data = self.fetch_api(api_path)
+            except urllib.error.HTTPError as e:
+                # On auth errors, try to login and retry once
+                if e.code in (401, 500):
+                    print(f"ZTE API error ({e.code}), attempting login...")
+                    if self.zte_login():
+                        print("Login successful, retrying request...")
+                        data = self.fetch_api(api_path)
+                    else:
+                        raise
+                else:
+                    raise
 
-            with urllib.request.urlopen(req, timeout=15) as response:
-                data = response.read()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(data)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(data)
 
         except urllib.error.HTTPError as e:
             self.send_error(e.code, str(e.reason))
