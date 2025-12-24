@@ -62,6 +62,19 @@ def ensure_logged_in(client: ZTEClient = Depends(get_client)) -> ZTEClient:
     return client
 
 
+def with_session_retry(func):
+    """Decorator to retry on session errors with fresh login"""
+    def wrapper(client: ZTEClient):
+        try:
+            return func(client)
+        except ZTESessionError:
+            # Session expired, force re-login and retry once
+            client._logged_in = False
+            client.login()
+            return func(client)
+    return wrapper
+
+
 # Pydantic models for API responses
 class PONDataResponse(BaseModel):
     """PON optical module data"""
@@ -362,7 +375,8 @@ async def logout():
 async def get_pon_data(client: ZTEClient = Depends(ensure_logged_in)):
     """Get PON optical module data"""
     try:
-        data = client.get_pon_data()
+        get_data = with_session_retry(lambda c: c.get_pon_data())
+        data = get_data(client)
         return PONDataResponse(**data.to_dict())
     except ZTESessionError as e:
         raise HTTPException(status_code=401, detail=str(e))
@@ -381,7 +395,8 @@ async def get_pon_data(client: ZTEClient = Depends(ensure_logged_in)):
 async def get_device_info(client: ZTEClient = Depends(ensure_logged_in)):
     """Get device information"""
     try:
-        data = client.get_device_info()
+        get_data = with_session_retry(lambda c: c.get_device_info())
+        data = get_data(client)
         return DeviceInfoResponse(**data.to_dict())
     except ZTESessionError as e:
         raise HTTPException(status_code=401, detail=str(e))
@@ -400,7 +415,8 @@ async def get_device_info(client: ZTEClient = Depends(ensure_logged_in)):
 async def get_lan_status(client: ZTEClient = Depends(ensure_logged_in)):
     """Get LAN port status"""
     try:
-        ports = client.get_lan_status()
+        get_data = with_session_retry(lambda c: c.get_lan_status())
+        ports = get_data(client)
         return [LANPortResponse(**p.to_dict()) for p in ports]
     except ZTESessionError as e:
         raise HTTPException(status_code=401, detail=str(e))
@@ -419,7 +435,8 @@ async def get_lan_status(client: ZTEClient = Depends(ensure_logged_in)):
 async def get_voip_status(client: ZTEClient = Depends(ensure_logged_in)):
     """Get VoIP line status"""
     try:
-        lines = client.get_voip_status()
+        get_data = with_session_retry(lambda c: c.get_voip_status())
+        lines = get_data(client)
         return [VoIPLineResponse(**l.to_dict()) for l in lines]
     except ZTESessionError as e:
         raise HTTPException(status_code=401, detail=str(e))
@@ -438,7 +455,8 @@ async def get_voip_status(client: ZTEClient = Depends(ensure_logged_in)):
 async def get_wan_status(client: ZTEClient = Depends(ensure_logged_in)):
     """Get WAN connection status"""
     try:
-        connections = client.get_wan_status()
+        get_data = with_session_retry(lambda c: c.get_wan_status())
+        connections = get_data(client)
         return [WANConnectionResponse(**c.to_dict()) for c in connections]
     except ZTESessionError as e:
         raise HTTPException(status_code=401, detail=str(e))
@@ -457,7 +475,8 @@ async def get_wan_status(client: ZTEClient = Depends(ensure_logged_in)):
 async def get_system_stats(client: ZTEClient = Depends(ensure_logged_in)):
     """Get system statistics"""
     try:
-        stats = client.get_system_stats()
+        get_data = with_session_retry(lambda c: c.get_system_stats())
+        stats = get_data(client)
         return SystemStatsResponse(**stats)
     except ZTESessionError as e:
         raise HTTPException(status_code=401, detail=str(e))
@@ -476,7 +495,8 @@ async def get_system_stats(client: ZTEClient = Depends(ensure_logged_in)):
 async def get_connected_devices(client: ZTEClient = Depends(ensure_logged_in)):
     """Get connected devices"""
     try:
-        devices = client.get_connected_devices()
+        get_data = with_session_retry(lambda c: c.get_connected_devices())
+        devices = get_data(client)
         return [ConnectedDeviceResponse(**d.to_dict()) for d in devices]
     except ZTESessionError as e:
         raise HTTPException(status_code=401, detail=str(e))
@@ -494,14 +514,23 @@ async def get_connected_devices(client: ZTEClient = Depends(ensure_logged_in)):
 async def get_full_status(client: ZTEClient = Depends(ensure_logged_in)):
     """Get full router status"""
     try:
+        # Use retry wrapper for each call
+        get_device = with_session_retry(lambda c: c.get_device_info())
+        get_pon = with_session_retry(lambda c: c.get_pon_data())
+        get_lan = with_session_retry(lambda c: c.get_lan_status())
+        get_voip = with_session_retry(lambda c: c.get_voip_status())
+        get_wan = with_session_retry(lambda c: c.get_wan_status())
+        get_system = with_session_retry(lambda c: c.get_system_stats())
+        get_devices = with_session_retry(lambda c: c.get_connected_devices())
+
         return {
-            "device": client.get_device_info().to_dict(),
-            "pon": client.get_pon_data().to_dict(),
-            "lan": [p.to_dict() for p in client.get_lan_status()],
-            "voip": [l.to_dict() for l in client.get_voip_status()],
-            "wan": [c.to_dict() for c in client.get_wan_status()],
-            "system": client.get_system_stats(),
-            "devices": [d.to_dict() for d in client.get_connected_devices()],
+            "device": get_device(client).to_dict(),
+            "pon": get_pon(client).to_dict(),
+            "lan": [p.to_dict() for p in get_lan(client)],
+            "voip": [l.to_dict() for l in get_voip(client)],
+            "wan": [c.to_dict() for c in get_wan(client)],
+            "system": get_system(client),
+            "devices": [d.to_dict() for d in get_devices(client)],
         }
     except ZTESessionError as e:
         raise HTTPException(status_code=401, detail=str(e))
