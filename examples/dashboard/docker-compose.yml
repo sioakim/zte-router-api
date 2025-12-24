@@ -1,0 +1,32 @@
+services:
+  # ZTE API Server
+  zte-api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: zte-api-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ZTE_HOST=${ZTE_HOST:-192.168.178.1}
+      - ZTE_USERNAME=${ZTE_USERNAME:-admin}
+      - ZTE_PASSWORD=${ZTE_PASSWORD:-admin}
+      - ZTE_TIMEOUT=${ZTE_TIMEOUT:-10}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Dashboard
+  dashboard:
+    build: .
+    container_name: zte-dashboard
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - ZTE_API_URL=http://zte-api:8000
+    depends_on:
+      - zte-api

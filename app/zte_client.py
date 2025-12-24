@@ -191,7 +191,7 @@ class ZTEClient:
         """Get cache-busting timestamp"""
         return int(time.time() * 1000)
 
-    def _load_view(self, view_tag: str) -> bool:
+    def _load_view(self, view_tag: str, retry: bool = True) -> bool:
         """
         Load a menuView (required before fetching menuData).
 
@@ -201,7 +201,14 @@ class ZTEClient:
         ts = self._get_timestamp()
         try:
             response = self._request(f"/?_type=menuView&_tag={view_tag}&Menu3Location=0&_={ts}")
-            return response is not None and "SessionTimeout" not in response
+            if response is None or "SessionTimeout" in response:
+                # Session expired, try to re-login and retry once
+                if retry:
+                    self._logged_in = False
+                    self.login()
+                    return self._load_view(view_tag, retry=False)
+                return False
+            return True
         except ZTEClientError:
             return False
 

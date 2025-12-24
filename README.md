@@ -299,6 +299,8 @@ zte-api-server/
 │   ├── __init__.py
 │   ├── main.py          # FastAPI application
 │   └── zte_client.py    # ZTE router client library
+├── examples/
+│   └── dashboard/       # Example dashboard application
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
@@ -306,6 +308,27 @@ zte-api-server/
 ├── .gitignore
 └── README.md
 ```
+
+## Examples
+
+### Dashboard
+
+A ready-to-use dashboard displaying PON optical metrics and LAN port status.
+
+```bash
+cd examples/dashboard
+
+# Create .env with your router credentials
+cp .env.example .env
+# Edit .env with your settings
+
+# Start with Docker Compose
+docker compose up -d
+
+# Open http://localhost:8080
+```
+
+See [examples/dashboard/README.md](examples/dashboard/README.md) for details.
 
 ### Running Tests
 
