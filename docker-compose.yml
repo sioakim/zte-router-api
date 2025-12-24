@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  zte-api:
+    build: .
+    container_name: zte-api-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ZTE_HOST=${ZTE_HOST:-192.168.178.1}
+      - ZTE_USERNAME=${ZTE_USERNAME:-admin}
+      - ZTE_PASSWORD=${ZTE_PASSWORD:-admin}
+      - ZTE_TIMEOUT=${ZTE_TIMEOUT:-10}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - zte-network
+
+networks:
+  zte-network:
+    driver: bridge
